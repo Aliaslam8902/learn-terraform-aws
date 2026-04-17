@@ -1,5 +1,3 @@
-# main.tf
-
 terraform {
   required_providers {
     aws = {
@@ -10,7 +8,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = "eu-north-1"
 }
 
 # Get the latest Amazon Linux 2 AMI
@@ -30,8 +28,17 @@ resource "aws_instance" "my_first_vm" {
   instance_type = "t3.micro"
 
   tags = {
-    Name = "MyFirstTerraformVM"
+    Name = "Ali-First-VM"
   }
+
+  user_data = <<-EOF
+              #!/bin/bash
+              sudo yum update -y
+              sudo yum install -y nginx
+              sudo systemctl start nginx
+              sudo systemctl enable nginx
+              echo "Hello from Terraform!" | sudo tee /usr/share/nginx/html/index.html
+              EOF
 }
 
 # Output the public IP for reference
