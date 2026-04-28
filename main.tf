@@ -1,17 +1,4 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = "eu-north-1"
-}
-
-# Get the latest Amazon Linux 2 AMI
+# Data sources for latest AMIs (region-specific)
 data "aws_ami" "amazon_linux_2" {
   most_recent = true
   owners      = ["amazon"]
@@ -22,26 +9,48 @@ data "aws_ami" "amazon_linux_2" {
   }
 }
 
-# Create a simple EC2 instance (Free Tier eligible)
-resource "aws_instance" "my_first_vm" {
-  ami           = data.aws_ami.amazon_linux_2.id
-  instance_type = "t3.micro"
+data "aws_ami" "windows_server_2022" {
+  most_recent = true
+  owners      = ["amazon"]
 
-  tags = {
-    Name = "Ali-First-VM"
+  filter {
+    name   = "name"
+    values = ["Windows_Server-2022-English-Full-Base-*"]
   }
-
-  user_data = <<-EOF
-              #!/bin/bash
-              sudo yum update -y
-              sudo yum install -y nginx
-              sudo systemctl start nginx
-              sudo systemctl enable nginx
-              echo "Hello from Terraform!" | sudo tee /usr/share/nginx/html/index.html
-              EOF
 }
 
-# Output the public IP for reference
-output "instance_public_ip" {
-  value = aws_instance.my_first_vm.public_ip
+# Network module
+module "network" {
+  source = "./modules/network"
+
+  vpc_cidr            = var.vpc_cidr
+  public_subnet_cidr  = var.public_subnet_cidr
+  private_subnet_cidr = var.private_subnet_cidr
+  project_name        = var.project_name
+}
+
+# Windows Bastion module
+module "bastion" {
+  source = "./modules/bastion"
+
+  ami           = data.aws_ami.windows_server_2022.id
+  instance_type = var.instance_type
+  subnet_id     = module.network.public_subnet_id
+  key_name      = var.windows_key_name
+  vpc_id        = module.network.vpc_id
+  project_name  = var.project_name
+  allowed_rdp_cidr = var.allowed_rdp_cidr
+}
+
+# Linux LAMP server module
+module "linux_vm" {
+  source = "./modules/linux_vm"
+
+  ami           = data.aws_ami.amazon_linux_2.id
+  instance_type = var.instance_type
+  subnet_id     = module.network.private_subnet_id
+  key_name      = var.linux_key_name
+  vpc_id        = module.network.vpc_id
+  bastion_sg_id = module.bastion.security_group_id
+  project_name  = var.project_name
 }
